@@ -110,7 +110,8 @@ export default function PublicPage() {
   }
 
   // short per-digit tick with pitch variation based on digit position
-  // digitIndex: 0 = rightmost (highest pitch), 6 = leftmost (lowest pitch)
+  // digitIndex: 0 = leftmost (lowest pitch), 6 = rightmost (highest pitch)
+  // Creates ascending pitch ladder as animation cascades left-to-right
   function playTick(digitIndex = 0) {
     if (!soundEnabled) return
     const ctx = ensureAudioContext()
@@ -118,10 +119,10 @@ export default function PublicPage() {
     if (ctx.state === 'suspended') ctx.resume()
     try {
       const now = ctx.currentTime
-      // Create musical ladder: rightmost digit (index 0) plays highest frequency
-      // Each digit to the left plays progressively lower pitch
+      // Create musical ladder: leftmost digit (index 0) plays lowest frequency
+      // Each digit to the right plays progressively higher pitch
       const baseFreq = 600
-      const frequency = baseFreq + ((ODOMETER_DIGITS - 1 - digitIndex) * 110)
+      const frequency = baseFreq + (digitIndex * 110)
       
       const o = ctx.createOscillator()
       const g = ctx.createGain()
@@ -171,6 +172,8 @@ export default function PublicPage() {
     const randIndex = Math.floor(Math.random() * pool.length)
     const p = pool[randIndex]
     const id = parseInt(p.id, 10)
+    // clear previous winner display
+    setWinner(null)
     // start ticking sound (requires user gesture in many browsers)
     startTicking()
     setTargetId(id)
@@ -205,11 +208,8 @@ export default function PublicPage() {
           </div>
 
           <div className="mb-6 flex items-center justify-center">
-            <Odometer digits={ODOMETER_DIGITS} animateDigits={animateCount} start={0} target={targetId ?? 0} duration={4000} onTick={(val) => {
+            <Odometer digits={ODOMETER_DIGITS} animateDigits={animateCount} start={0} target={targetId ?? 0} duration={6000} delayPerDigit={900} onTick={(val) => {
               const str = String(val).padStart(ODOMETER_DIGITS, '0')
-              const pool = participantsBySheet[selectedCategory] || participants || []
-              const idx = pool.findIndex(p => p.id === str)
-              if (idx !== -1) setCurrentCandidate(pool[idx])
               // per-digit tick: fire when any digit changes, play pitch based on which digit changed
               let digitIndexChanged = -1
               for (let i = 0; i < ODOMETER_DIGITS; i++) {
@@ -229,14 +229,7 @@ export default function PublicPage() {
               if (idx !== -1) {
                 const record = { category: selectedCategory, index: idx, winner: pool[idx], timestamp: Date.now() }
                 setWinner(record)
-                // append to winners history
-                const next = [...winners, record]
-                setWinners(next)
-                try { localStorage.setItem('winners', JSON.stringify(next)) } catch (err) { void err }
-                // also keep a quick current-winner key for backward compatibility
-                try { localStorage.setItem('winner', JSON.stringify(record)) } catch (err) { void err }
-                setConfetti(true)
-                // stop tick sound and play cheer
+                setCurrentCandidate(pool[idx])
                 stopTicking()
                 playCheer()
                 setTimeout(() => setConfetti(false), 6000)

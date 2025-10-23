@@ -52,18 +52,24 @@ export default function Odometer({
     }
 
     // prepare per-digit durations (add small variability)
+    // rightmost (last) digits get significantly more overshoot for suspense
     const overshoots = Array(digitsCount).fill(0).map((_, i) => {
-      const idxFromRight = digitsCount - 1 - i
-      if (idxFromRight >= Math.max(0, Math.min(animateDigits, digitsCount))) return 0
-      return Math.floor(Math.random() * 4 + 2 + Math.floor(idxFromRight * 0.4))
+      const distFromRight = digitsCount - 1 - i
+      if (i >= Math.max(0, Math.min(animateDigits, digitsCount))) return 0
+      // last 4 digits get heavy overshoot: 8-15x multiplier instead of normal 2-6
+      if (distFromRight <= 3) {
+        return Math.floor(Math.random() * 8 + 8 + distFromRight * 2)  // 8-15+ range
+      }
+      // earlier digits spin faster with normal overshoot
+      return Math.floor(Math.random() * 3 + 1)  // 1-4 range
     })
 
     const spinDurations = overshoots.map(o => duration + o * 280)
 
-    // schedule spins: right-to-left. rightmost active digit starts first (idxFromRight=0)
+    // schedule spins: left-to-right. leftmost active digit starts first
+    // animateDigits controls how many leftmost digits participate (e.g., animateDigits=3 means only leftmost 3 digits animate)
     for (let i = 0; i < digitsCount; i++) {
-      const idxFromRight = digitsCount - 1 - i
-      const active = idxFromRight < Math.max(0, Math.min(animateDigits, digitsCount))
+      const active = i < Math.max(0, Math.min(animateDigits, digitsCount))
       if (!active) {
         // immediately set to target
         setCurrentDigits(prev => {
@@ -74,7 +80,7 @@ export default function Odometer({
         continue
       }
 
-      const delay = idxFromRight * delayPerDigit + Math.floor(Math.random() * 160)
+      const delay = i * delayPerDigit + Math.floor(Math.random() * 160)
       const spinTime = spinDurations[i]
 
       const startTimer = setTimeout(() => {
@@ -135,13 +141,11 @@ export default function Odometer({
     <div className="odometer flex items-center gap-2 px-3 py-2">
       {currentDigits.map((d, i) => {
         const digitsCount = currentDigits.length
-        const idxFromRight = digitsCount - 1 - i
-        const active = idxFromRight < Math.max(0, Math.min(animateDigits, digitsCount))
+        const active = i < Math.max(0, Math.min(animateDigits, digitsCount))
         // digit can anticipate if:
         // - it's still spinning, AND
-        // - the digit to its right (idxFromRight - 1) is locked, OR it's the rightmost digit (idxFromRight === 0)
-        const digitIndexFromRight = digitsCount - 1 - i
-        const canAnticipate = digitIndexFromRight === 0 || lockedFlags[i + 1] || false
+        // - the digit to its left (i - 1) is locked, OR it's the leftmost digit (i === 0)
+        const canAnticipate = i === 0 || lockedFlags[i - 1] || false
         return (
           <DigitReel
             key={i}
