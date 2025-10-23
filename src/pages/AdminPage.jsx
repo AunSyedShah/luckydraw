@@ -1,6 +1,18 @@
 import { useState, useRef } from 'react'
+import { useSound } from '../contexts/SoundContext'
 import { Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
+
+function SoundToggle() {
+  const { soundEnabled, setSoundEnabled } = useSound()
+  return (
+    <button
+      onClick={() => setSoundEnabled(prev => !prev)}
+      className={`px-3 py-2 rounded text-sm ${soundEnabled ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>
+      {soundEnabled ? 'Sound: On' : 'Sound: Off'}
+    </button>
+  )
+}
 
 export default function AdminPage() {
   const [participants, setParticipants] = useState([])
@@ -33,7 +45,8 @@ export default function AdminPage() {
       // persist for public page
       localStorage.setItem('participants', JSON.stringify(mapped))
       // remove previous winner if admin re-uploads
-      localStorage.removeItem('winner')
+  localStorage.removeItem('winner')
+  localStorage.removeItem('winners')
     }
     reader.readAsArrayBuffer(file)
   }
@@ -42,6 +55,7 @@ export default function AdminPage() {
     setParticipants([])
     localStorage.removeItem('participants')
     localStorage.removeItem('winner')
+    localStorage.removeItem('winners')
   }
 
   return (
@@ -51,6 +65,7 @@ export default function AdminPage() {
           <h1 className="text-3xl font-extrabold text-indigo-900">Admin Panel - Lucky Draw</h1>
           <div className="flex items-center gap-4">
             <Link to="/public" className="px-3 py-2 bg-green-600 text-white rounded shadow text-sm hover:bg-green-700">View Public Page</Link>
+            <SoundToggle />
             <button className="px-3 py-2 bg-white border rounded shadow text-sm" onClick={toggleFullScreen}>Full screen</button>
           </div>
         </div>
@@ -63,6 +78,7 @@ export default function AdminPage() {
           <div className="text-sm text-gray-500">Accepted: .xlsx, .xls, .csv</div>
           <div className="ml-auto text-sm font-medium text-indigo-700">Participants: {participants.length}</div>
         </div>
+      
 
         <div className="card rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">

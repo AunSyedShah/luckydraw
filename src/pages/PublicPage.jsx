@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import Confetti from '../components/Confetti'
 import Odometer from '../components/Odometer'
+import { useSound } from '../contexts/SoundContext'
 
 export default function PublicPage() {
   const [participants, setParticipants] = useState([])
@@ -9,9 +10,9 @@ export default function PublicPage() {
   const [confetti, setConfetti] = useState(false)
   const [targetId, setTargetId] = useState(null)
   const [currentCandidate, setCurrentCandidate] = useState(null)
-  const [soundEnabled, setSoundEnabled] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('soundEnabled')) ?? true } catch (err) { void err; return true }
-  })
+  const [selectedCategory, setSelectedCategory] = useState('Category 1')
+  const [winners, setWinners] = useState([])
+  const { soundEnabled } = useSound()
 
   // lightweight audio manager using Web Audio API
   const audioRef = useRef({ ctx: null, tickOsc: null, tickGain: null })
@@ -27,7 +28,7 @@ export default function PublicPage() {
   }
 
   function startTicking() {
-    if (!soundEnabled) return
+  if (!soundEnabled) return
     const ctx = ensureAudioContext()
     if (!ctx) return
     // resume if suspended (many browsers require user gesture)
@@ -118,12 +119,17 @@ export default function PublicPage() {
     if (stored) setParticipants(JSON.parse(stored))
     const storedWinner = localStorage.getItem('winner')
     if (storedWinner) setWinner(JSON.parse(storedWinner))
+    const storedWinners = localStorage.getItem('winners')
+    if (storedWinners) setWinners(JSON.parse(storedWinners))
   }, [])
 
   function startRandomDraw() {
     if (!participants || participants.length === 0) return alert('No participants uploaded. Ask admin to upload first.')
-    const randIndex = Math.floor(Math.random() * participants.length)
-    const p = participants[randIndex]
+  // Category labels are just draw labels — pick from all participants
+  const pool = participants
+  if (!pool || pool.length === 0) return alert('No participants uploaded. Ask admin to upload first.')
+  const randIndex = Math.floor(Math.random() * pool.length)
+  const p = pool[randIndex]
     const id = parseInt(p.id, 10)
     // start ticking sound (requires user gesture in many browsers)
     startTicking()
@@ -150,17 +156,13 @@ export default function PublicPage() {
 
           <div className="mb-6 flex items-center justify-center gap-4">
             <button className="px-6 py-3 rounded-lg bg-amber-500 text-white text-lg font-semibold" onClick={startRandomDraw}>Start Random Draw</button>
-            <button
-              onClick={() => setSoundEnabled(prev => {
-                const next = !prev
-                try { localStorage.setItem('soundEnabled', JSON.stringify(next)) } catch (err) { void err }
-                if (next) ensureAudioContext()
-                else stopTicking()
-                return next
-              })}
-              className={`px-4 py-2 rounded-lg text-sm ${soundEnabled ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'}`}>
-              {soundEnabled ? 'Sound: On' : 'Sound: Off'}
-            </button>
+            
+            <div className="select-wrapper">
+              <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="category-select">
+                <option>Category 1</option>
+                <option>Category 2</option>
+              </select>
+            </div>
           </div>
 
           <div className="mb-6 flex items-center justify-center">
@@ -178,18 +180,26 @@ export default function PublicPage() {
               const finalStr = String(final).padStart(7, '0')
               const idx = participants.findIndex(p => p.id === finalStr)
               if (idx !== -1) {
-                const result = { index: idx, winner: participants[idx] }
-                setWinner(result)
-                localStorage.setItem('winner', JSON.stringify(result))
+                const record = { category: selectedCategory, index: idx, winner: participants[idx], timestamp: Date.now() }
+                setWinner(record)
+                // append to winners history
+                const next = [...winners, record]
+                setWinners(next)
+                try { localStorage.setItem('winners', JSON.stringify(next)) } catch (err) { void err }
+                // also keep a quick current-winner key for backward compatibility
+                try { localStorage.setItem('winner', JSON.stringify(record)) } catch (err) { void err }
                 setConfetti(true)
                 // stop tick sound and play cheer
-              stopTicking()
+                stopTicking()
                 playCheer()
                 setTimeout(() => setConfetti(false), 6000)
               } else {
-                const result = { index: -1, winner: { id: finalStr, name: 'Unknown', course: '' } }
-                setWinner(result)
-                localStorage.setItem('winner', JSON.stringify(result))
+                const record = { category: selectedCategory, index: -1, winner: { id: finalStr, name: 'Unknown', course: '' }, timestamp: Date.now() }
+                setWinner(record)
+                const next = [...winners, record]
+                setWinners(next)
+                try { localStorage.setItem('winners', JSON.stringify(next)) } catch (err) { void err }
+                try { localStorage.setItem('winner', JSON.stringify(record)) } catch (err) { void err }
               }
             }} />
           </div>
