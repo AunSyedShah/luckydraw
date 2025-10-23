@@ -99,6 +99,19 @@ html, body, #root {
 /* To make a smooth continuous spin we translate the track by multiples of single-digit height;
    The animation assumes the track contains an integral number of digits stacked vertically. */
 
+/* Anticipation wobble: subtle shake and hesitation effect for suspense */
+@keyframes anticipate-wobble {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  50% { transform: translateX(2px); }
+  75% { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+
+.anticipate-wobble {
+  animation: anticipate-wobble 200ms ease-in-out infinite;
+}
+
 /* Confetti canvas should be fixed and not affect layout */
 .confetti-canvas {
   position: fixed;

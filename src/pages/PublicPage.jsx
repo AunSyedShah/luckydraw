@@ -15,12 +15,29 @@ export default function PublicPage() {
   const [selectedCategory, setSelectedCategory] = useState('Category 1')
   const [categoryOptions, setCategoryOptions] = useState(['Category 1', 'Category 2'])
   const [winners, setWinners] = useState([])
-  const [animateCount, setAnimateCount] = useState(7)
+  const [animateCount, setAnimateCount] = useState(() => {
+    try {
+      const stored = localStorage.getItem('animateDigits')
+      return stored ? parseInt(stored, 10) : 7
+    } catch {
+      return 7
+    }
+  })
   const { soundEnabled } = useSound()
+
+  // Load animateCount from localStorage when page loads (in case it changed in Admin)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('animateDigits')
+      if (stored) setAnimateCount(parseInt(stored, 10))
+    } catch {
+      void 0
+    }
+  }, [])
 
   // lightweight audio manager using Web Audio API
   const audioRef = useRef({ ctx: null, tickOsc: null, tickGain: null })
-  const lastTickDigit = useRef(null)
+  const lastTickDigit = useRef('0000000')  // track all 7 digits to detect which one changed
 
   function ensureAudioContext() {
     if (!audioRef.current.ctx) {
@@ -92,18 +109,24 @@ export default function PublicPage() {
     })
   }
 
-  // short per-digit tick (more reliable than a continuous oscillator)
-  function playTick() {
+  // short per-digit tick with pitch variation based on digit position
+  // digitIndex: 0 = rightmost (highest pitch), 6 = leftmost (lowest pitch)
+  function playTick(digitIndex = 0) {
     if (!soundEnabled) return
     const ctx = ensureAudioContext()
     if (!ctx) return
     if (ctx.state === 'suspended') ctx.resume()
     try {
       const now = ctx.currentTime
+      // Create musical ladder: rightmost digit (index 0) plays highest frequency
+      // Each digit to the left plays progressively lower pitch
+      const baseFreq = 600
+      const frequency = baseFreq + ((ODOMETER_DIGITS - 1 - digitIndex) * 110)
+      
       const o = ctx.createOscillator()
       const g = ctx.createGain()
       o.type = 'triangle'
-      o.frequency.value = 800
+      o.frequency.value = frequency
       g.gain.value = 0.0001
       o.connect(g)
       g.connect(ctx.destination)
@@ -113,8 +136,8 @@ export default function PublicPage() {
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.09)
       o.start(now)
       o.stop(now + 0.1)
-    } catch (err) {
-      void err
+    } catch {
+      void 0
     }
   }
 
@@ -179,16 +202,6 @@ export default function PublicPage() {
                 {categoryOptions.map((c, i) => <option key={i} value={c}>{c}</option>)}
               </select>
             </div>
-
-            <div className="select-wrapper">
-              <label className="text-sm mr-2">Animate last</label>
-              <select value={animateCount} onChange={(e) => setAnimateCount(Number(e.target.value))} className="category-select">
-                {Array.from({ length: ODOMETER_DIGITS }).map((_, i) => {
-                  const n = i + 1
-                  return <option key={n} value={n}>{n}</option>
-                })}
-              </select>
-            </div>
           </div>
 
           <div className="mb-6 flex items-center justify-center">
@@ -197,11 +210,17 @@ export default function PublicPage() {
               const pool = participantsBySheet[selectedCategory] || participants || []
               const idx = pool.findIndex(p => p.id === str)
               if (idx !== -1) setCurrentCandidate(pool[idx])
-              // per-digit tick: fire when the last digit changes
-              const lastDigit = str[str.length - 1]
-              if (lastTickDigit.current !== lastDigit) {
-                lastTickDigit.current = lastDigit
-                playTick()
+              // per-digit tick: fire when any digit changes, play pitch based on which digit changed
+              let digitIndexChanged = -1
+              for (let i = 0; i < ODOMETER_DIGITS; i++) {
+                if (lastTickDigit.current[i] !== str[i]) {
+                  digitIndexChanged = i
+                  break
+                }
+              }
+              if (digitIndexChanged !== -1) {
+                lastTickDigit.current = str
+                playTick(digitIndexChanged)
               }
             }} onComplete={(final) => {
               const finalStr = String(final).padStart(ODOMETER_DIGITS, '0')

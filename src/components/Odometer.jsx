@@ -24,6 +24,7 @@ export default function Odometer({
   const onCompleteRef = useRef(onComplete)
   const completedRef = useRef(0)
   const [spinFlags, setSpinFlags] = useState(() => Array(digits).fill(false))
+  const [lockedFlags, setLockedFlags] = useState(() => Array(digits).fill(false))
 
   useEffect(() => { onTickRef.current = onTick }, [onTick])
   useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
@@ -92,6 +93,13 @@ export default function Odometer({
             return copy
           })
 
+          // mark as locked so next digit (to the left) can start anticipating
+          setLockedFlags(prev => {
+            const copy = [...prev]
+            copy[i] = true
+            return copy
+          })
+
           setCurrentDigits(prev => {
             const copy = [...prev]
             copy[i] = targetText[i]
@@ -119,6 +127,7 @@ export default function Odometer({
       timersRef.current.forEach(t => clearTimeout(t))
       timersRef.current = []
       setSpinFlags(Array(digits).fill(false))
+      setLockedFlags(Array(digits).fill(false))
     }
   }, [start, target, digits, animateDigits, duration, delayPerDigit])
 
@@ -128,6 +137,11 @@ export default function Odometer({
         const digitsCount = currentDigits.length
         const idxFromRight = digitsCount - 1 - i
         const active = idxFromRight < Math.max(0, Math.min(animateDigits, digitsCount))
+        // digit can anticipate if:
+        // - it's still spinning, AND
+        // - the digit to its right (idxFromRight - 1) is locked, OR it's the rightmost digit (idxFromRight === 0)
+        const digitIndexFromRight = digitsCount - 1 - i
+        const canAnticipate = digitIndexFromRight === 0 || lockedFlags[i + 1] || false
         return (
           <DigitReel
             key={i}
@@ -136,6 +150,7 @@ export default function Odometer({
             finalAnticipate={false}
             spinDuration={duration}
             spin={spinFlags[i]}
+            canAnticipate={canAnticipate && spinFlags[i]}
           />
         )
       })}
@@ -143,11 +158,13 @@ export default function Odometer({
   )
 }
 
-function DigitReel({ digit, active = true, finalAnticipate = false, spinDuration = 2200, spin = false }) {
+function DigitReel({ digit, active = true, finalAnticipate = false, spinDuration = 2200, spin = false, canAnticipate = false }) {
   const [anticipate, setAnticipate] = useState(false)
   const [localFinal, setLocalFinal] = useState(false)
   const [displayDigit, setDisplayDigit] = useState(() => String(digit || '0'))
   const spinRef = useRef(false)
+  const [isAnticipating, setIsAnticipating] = useState(false)
+  const spinStartTimeRef = useRef(null)
 
   // update displayed digit immediately if prop changes while not spinning
   useEffect(() => {
@@ -170,13 +187,35 @@ function DigitReel({ digit, active = true, finalAnticipate = false, spinDuration
     let iv
     if (spin) {
       spinRef.current = true
-      // increment displayed digit every 60ms for smoother revolve
+      spinStartTimeRef.current = Date.now()
+      setIsAnticipating(false)
+      // increment displayed digit; speed varies (60ms normal, 120ms in final anticipation)
       iv = setInterval(() => {
-        setDisplayDigit(prev => String((Number(prev) + 1) % 10))
+        const elapsed = Date.now() - spinStartTimeRef.current
+        const remaining = spinDuration - elapsed
+        
+        // detect anticipation phase: final 600ms, BUT only if canAnticipate is true (cascade effect)
+        const anticipationThreshold = 600
+        if (remaining < anticipationThreshold && !isAnticipating && canAnticipate) {
+          setIsAnticipating(true)
+        }
+        
+        // during anticipation: slow down and add hesitation (only if canAnticipate)
+        let shouldIncrement = true
+        if (remaining < anticipationThreshold && canAnticipate) {
+          // slow: increment every other tick (double the visual time)
+          shouldIncrement = Math.random() > 0.4
+        }
+        
+        if (shouldIncrement) {
+          setDisplayDigit(prev => String((Number(prev) + 1) % 10))
+        }
       }, 60)
     } else {
       // stop spinning: snap to final digit
       spinRef.current = false
+      setIsAnticipating(false)
+      spinStartTimeRef.current = null
       setDisplayDigit(String(digit))
       if (iv) {
         clearInterval(iv)
@@ -184,7 +223,7 @@ function DigitReel({ digit, active = true, finalAnticipate = false, spinDuration
       }
     }
     return () => { if (iv) clearInterval(iv) }
-  }, [spin, digit])
+  }, [spin, digit, spinDuration, isAnticipating, canAnticipate])
 
   useEffect(() => { if (finalAnticipate) setLocalFinal(true) }, [finalAnticipate])
 
@@ -195,7 +234,7 @@ function DigitReel({ digit, active = true, finalAnticipate = false, spinDuration
           <span key={n} className="h-16 flex items-center justify-center text-gray-300">{n % 10}</span>
         ))}
       </div>
-      <div className={`absolute inset-0 flex items-center justify-center text-yellow-300 drop-shadow-[0_0_6px_rgba(255,255,0,0.6)] font-bold pointer-events-none transition-opacity duration-150 ${spin ? 'opacity-0' : 'opacity-100'}`}>{displayDigit}</div>
+      <div className={`absolute inset-0 flex items-center justify-center text-yellow-300 drop-shadow-[0_0_6px_rgba(255,255,0,0.6)] font-bold pointer-events-none transition-opacity duration-150 ${spin ? 'opacity-0' : 'opacity-100'} ${isAnticipating ? 'animate-pulse scale-110' : ''}`}>{displayDigit}</div>
     </div>
   )
 }

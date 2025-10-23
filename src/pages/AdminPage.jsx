@@ -1,7 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useSound } from '../contexts/SoundContext'
 import { Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
+
+const ODOMETER_DIGITS = 7
 
 function SoundToggle() {
   const { soundEnabled, setSoundEnabled } = useSound()
@@ -17,8 +19,24 @@ function SoundToggle() {
 export default function AdminPage() {
   const [participants, setParticipants] = useState([])
   const [search, setSearch] = useState('')
+  const [animateCount, setAnimateCount] = useState(() => {
+    try {
+      const stored = localStorage.getItem('animateDigits')
+      return stored ? parseInt(stored, 10) : 7
+    } catch {
+      return 7
+    }
+  })
   const listRef = useRef(null)
   const containerRef = useRef(null)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('animateDigits', String(animateCount))
+    } catch {
+      void 0
+    }
+  }, [animateCount])
 
   function toggleFullScreen() {
     const el = containerRef.current || document.documentElement
@@ -83,6 +101,15 @@ export default function AdminPage() {
           <div className="flex items-center gap-4">
             <Link to="/public" className="px-3 py-2 bg-green-600 text-white rounded shadow text-sm hover:bg-green-700">View Public Page</Link>
             <SoundToggle />
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Animate last</label>
+              <select value={animateCount} onChange={(e) => setAnimateCount(Number(e.target.value))} className="px-3 py-2 border border-gray-300 rounded bg-white text-sm">
+                {Array.from({ length: ODOMETER_DIGITS }).map((_, i) => {
+                  const n = i + 1
+                  return <option key={n} value={n}>{n}</option>
+                })}
+              </select>
+            </div>
             <button className="px-3 py-2 bg-white border rounded shadow text-sm" onClick={toggleFullScreen}>Full screen</button>
           </div>
         </div>
