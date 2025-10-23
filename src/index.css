@@ -41,6 +41,64 @@ html, body, #root {
   animation-fill-mode: both;
 }
 
+/* Anticipation nudge before the reel drops */
+@keyframes anticipate-nudge {
+  0% { transform: translateY(0%); }
+  30% { transform: translateY(-10%); }
+  60% { transform: translateY(4%); }
+  100% { transform: translateY(0%); }
+}
+
+.reel-track.anticipate {
+  animation-name: anticipate-nudge;
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1);
+  animation-fill-mode: both;
+}
+
+/* Final anticipation: subtle sway on rightmost digits before settle */
+@keyframes final-sway {
+  0% { transform: translateY(0%); }
+  20% { transform: translateY(-6%); }
+  45% { transform: translateY(3%); }
+  70% { transform: translateY(-2%); }
+  100% { transform: translateY(0%); }
+}
+
+.reel-track.final-anticipate {
+  animation-name: final-sway;
+  animation-duration: 700ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+}
+
+/* Revolving reel animation: translate the track vertically in a loop to show digits rolling */
+@keyframes reel-spin {
+  0% { transform: translateY(0%); }
+  100% { transform: translateY(-100%); }
+}
+
+.reel-track.animate {
+  animation-name: reel-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  /* duration is set inline from React to control spin speed */
+}
+
+.reel-track {
+  display: block;
+  width: 100%;
+}
+
+.reel-track span {
+  display: block;
+  height: 4rem; /* match digit container height */
+  line-height: 4rem;
+}
+
+/* To make a smooth continuous spin we translate the track by multiples of single-digit height;
+   The animation assumes the track contains an integral number of digits stacked vertically. */
+
 /* Confetti canvas should be fixed and not affect layout */
 .confetti-canvas {
   position: fixed;
@@ -60,7 +118,12 @@ html, body, #root {
   -moz-appearance: none;
   background: linear-gradient(180deg,#ffffff 0%, #f8fafc 100%);
   border: 1px solid rgba(99,102,241,0.12);
-  padding: 0.5rem 0.9rem;
+  padding: 0.5rem 1.1rem 0.5rem 0.9rem;
+  min-width: 14rem;
+  max-width: 28rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-radius: 0.6rem;
   box-shadow: 0 6px 18px rgba(15,23,42,0.06);
   font-weight: 600;
@@ -79,7 +142,7 @@ html, body, #root {
 .select-wrapper::after {
   content: '\25BC';
   position: absolute;
-  right: 10px;
+  right: 14px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;

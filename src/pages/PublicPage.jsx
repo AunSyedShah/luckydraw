@@ -5,13 +5,17 @@ import Odometer from '../components/Odometer'
 import { useSound } from '../contexts/SoundContext'
 
 export default function PublicPage() {
+  const ODOMETER_DIGITS = 7
   const [participants, setParticipants] = useState([])
+  const [participantsBySheet, setParticipantsBySheet] = useState({})
   const [winner, setWinner] = useState(null)
   const [confetti, setConfetti] = useState(false)
   const [targetId, setTargetId] = useState(null)
   const [currentCandidate, setCurrentCandidate] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('Category 1')
+  const [categoryOptions, setCategoryOptions] = useState(['Category 1', 'Category 2'])
   const [winners, setWinners] = useState([])
+  const [animateCount, setAnimateCount] = useState(7)
   const { soundEnabled } = useSound()
 
   // lightweight audio manager using Web Audio API
@@ -121,15 +125,28 @@ export default function PublicPage() {
     if (storedWinner) setWinner(JSON.parse(storedWinner))
     const storedWinners = localStorage.getItem('winners')
     if (storedWinners) setWinners(JSON.parse(storedWinners))
+    const storedCategories = localStorage.getItem('categories')
+    if (storedCategories) {
+      try {
+        const arr = JSON.parse(storedCategories)
+        if (Array.isArray(arr) && arr.length > 0) {
+          setCategoryOptions(arr.slice(0, 10))
+          setSelectedCategory(arr[0])
+        }
+      } catch (err) { void err }
+    }
+    const pbs = localStorage.getItem('participantsBySheet')
+    if (pbs) {
+      try { setParticipantsBySheet(JSON.parse(pbs)) } catch (err) { void err }
+    }
   }, [])
 
   function startRandomDraw() {
-    if (!participants || participants.length === 0) return alert('No participants uploaded. Ask admin to upload first.')
-  // Category labels are just draw labels — pick from all participants
-  const pool = participants
-  if (!pool || pool.length === 0) return alert('No participants uploaded. Ask admin to upload first.')
-  const randIndex = Math.floor(Math.random() * pool.length)
-  const p = pool[randIndex]
+    // pick pool based on selectedCategory (sheet name)
+    const pool = participantsBySheet[selectedCategory] || participants || []
+    if (!pool || pool.length === 0) return alert(`No participants uploaded for "${selectedCategory}". Ask admin to upload or check the sheet names.`)
+    const randIndex = Math.floor(Math.random() * pool.length)
+    const p = pool[randIndex]
     const id = parseInt(p.id, 10)
     // start ticking sound (requires user gesture in many browsers)
     startTicking()
@@ -159,17 +176,27 @@ export default function PublicPage() {
             
             <div className="select-wrapper">
               <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="category-select">
-                <option>Category 1</option>
-                <option>Category 2</option>
+                {categoryOptions.map((c, i) => <option key={i} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div className="select-wrapper">
+              <label className="text-sm mr-2">Animate last</label>
+              <select value={animateCount} onChange={(e) => setAnimateCount(Number(e.target.value))} className="category-select">
+                {Array.from({ length: ODOMETER_DIGITS }).map((_, i) => {
+                  const n = i + 1
+                  return <option key={n} value={n}>{n}</option>
+                })}
               </select>
             </div>
           </div>
 
           <div className="mb-6 flex items-center justify-center">
-            <Odometer start={0} target={targetId ?? 0} duration={4000} onTick={(val) => {
-              const str = String(val).padStart(7, '0')
-              const idx = participants.findIndex(p => p.id === str)
-              if (idx !== -1) setCurrentCandidate(participants[idx])
+            <Odometer digits={ODOMETER_DIGITS} animateDigits={animateCount} start={0} target={targetId ?? 0} duration={4000} onTick={(val) => {
+              const str = String(val).padStart(ODOMETER_DIGITS, '0')
+              const pool = participantsBySheet[selectedCategory] || participants || []
+              const idx = pool.findIndex(p => p.id === str)
+              if (idx !== -1) setCurrentCandidate(pool[idx])
               // per-digit tick: fire when the last digit changes
               const lastDigit = str[str.length - 1]
               if (lastTickDigit.current !== lastDigit) {
@@ -177,10 +204,11 @@ export default function PublicPage() {
                 playTick()
               }
             }} onComplete={(final) => {
-              const finalStr = String(final).padStart(7, '0')
-              const idx = participants.findIndex(p => p.id === finalStr)
+              const finalStr = String(final).padStart(ODOMETER_DIGITS, '0')
+              const pool = participantsBySheet[selectedCategory] || participants || []
+              const idx = pool.findIndex(p => p.id === finalStr)
               if (idx !== -1) {
-                const record = { category: selectedCategory, index: idx, winner: participants[idx], timestamp: Date.now() }
+                const record = { category: selectedCategory, index: idx, winner: pool[idx], timestamp: Date.now() }
                 setWinner(record)
                 // append to winners history
                 const next = [...winners, record]

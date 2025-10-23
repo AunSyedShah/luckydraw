@@ -1,123 +1,202 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react'
 
+// Odometer: per-digit scheduled spins that lock right-to-left
+// Props:
+// - start, target: numeric values
+// - digits: total digits to display (default 7)
+// - animateDigits: how many right-most digits should participate (1..digits)
+// - duration: base spin time per digit (ms)
+// - delayPerDigit: stagger gap between right-to-left starts (ms)
+// - onTick, onComplete
 export default function Odometer({
   start = 0,
   target = 0,
-  duration = 4000,
-  delayPerDigit = 350,
-  onComplete,
+  digits = 7,
+  animateDigits = 7,
+  duration = 2200,
+  delayPerDigit = 700,
   onTick,
+  onComplete,
 }) {
-  const [value, setValue] = useState(start);
-  const [digitOffsets, setDigitOffsets] = useState([]);
-  const [digitDelays, setDigitDelays] = useState([]);
-  const rafRef = useRef();
+  const [currentDigits, setCurrentDigits] = useState(() => Array(digits).fill('0'))
+  const timersRef = useRef([])
   const onTickRef = useRef(onTick)
   const onCompleteRef = useRef(onComplete)
+  const completedRef = useRef(0)
+  const [spinFlags, setSpinFlags] = useState(() => Array(digits).fill(false))
 
-  // keep refs up-to-date without causing the main animation effect to re-run
   useEffect(() => { onTickRef.current = onTick }, [onTick])
   useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
 
   useEffect(() => {
-    cancelAnimationFrame(rafRef.current);
-    if (start === target) {
-      setValue(start);
-      onCompleteRef.current?.(start);
-      return;
+    // cleanup
+    timersRef.current.forEach(t => clearTimeout(t))
+    timersRef.current = []
+    completedRef.current = 0
+
+    const digitsCount = digits
+    const startText = String(start).padStart(digitsCount, '0')
+    const targetText = String(target).padStart(digitsCount, '0')
+
+    // initialize
+    setCurrentDigits(startText.split(''))
+
+    // if nothing to do, avoid scheduling spins (prevents animation on mount when start === target)
+    if (Number(start) === Number(target)) {
+      // ensure no spinning flags
+      setSpinFlags(Array(digitsCount).fill(false))
+      // call onTick with current value for consistency
+      onTickRef.current?.(Number(startText))
+      return
     }
 
-    const total = target - start;
+    // prepare per-digit durations (add small variability)
+    const overshoots = Array(digitsCount).fill(0).map((_, i) => {
+      const idxFromRight = digitsCount - 1 - i
+      if (idxFromRight >= Math.max(0, Math.min(animateDigits, digitsCount))) return 0
+      return Math.floor(Math.random() * 4 + 2 + Math.floor(idxFromRight * 0.4))
+    })
 
-    // different spin count for each digit
-    const overshoots = Array(7)
-      .fill(0)
-      .map(() => Math.floor(Math.random() * 5 + 3));
-    setDigitOffsets(overshoots);
-    // create stable per-digit delays for this run (avoid Math.random in render)
-    const delays = Array(7).fill(0).map((_, i) => i * delayPerDigit + Math.floor(Math.random() * 200));
-    setDigitDelays(delays);
+    const spinDurations = overshoots.map(o => duration + o * 280)
 
-    let startTime = null;
-    const easeOut = (u) => 1 - Math.pow(1 - u, 3);
-
-    function step(now) {
-      if (!startTime) startTime = now;
-      const elapsed = now - startTime;
-      const tRaw = Math.min(1, elapsed / duration);
-      const eased = easeOut(tRaw);
-      const next = start + Math.round(total * eased);
-  setValue(next);
-  onTickRef.current?.(next);
-
-      if (tRaw < 1) rafRef.current = requestAnimationFrame(step);
-      else {
-        setValue(target);
-        onTickRef.current?.(target);
-        onCompleteRef.current?.(target);
+    // schedule spins: right-to-left. rightmost active digit starts first (idxFromRight=0)
+    for (let i = 0; i < digitsCount; i++) {
+      const idxFromRight = digitsCount - 1 - i
+      const active = idxFromRight < Math.max(0, Math.min(animateDigits, digitsCount))
+      if (!active) {
+        // immediately set to target
+        setCurrentDigits(prev => {
+          const copy = [...prev]
+          copy[i] = targetText[i]
+          return copy
+        })
+        continue
       }
+
+      const delay = idxFromRight * delayPerDigit + Math.floor(Math.random() * 160)
+      const spinTime = spinDurations[i]
+
+      const startTimer = setTimeout(() => {
+        // set spin flag ON for this digit so DigitReel shows revolving
+        setSpinFlags(prev => {
+          const copy = [...prev]
+          copy[i] = true
+          return copy
+        })
+
+        // schedule stop: turn spin off and set final digit
+        const stopTimer = setTimeout(() => {
+          setSpinFlags(prev => {
+            const copy = [...prev]
+            copy[i] = false
+            return copy
+          })
+
+          setCurrentDigits(prev => {
+            const copy = [...prev]
+            copy[i] = targetText[i]
+            return copy
+          })
+
+          // call onTick with latest combined number (approximate using target for stopped digits)
+          // This avoids reading `currentDigits` from the closure.
+          const combinedStr = targetText
+          onTickRef.current?.(Number(combinedStr))
+
+          completedRef.current += 1
+          if (completedRef.current >= Math.min(animateDigits, digitsCount)) {
+            onCompleteRef.current?.(Number(targetText))
+          }
+        }, spinTime)
+
+        timersRef.current.push(stopTimer)
+      }, delay)
+
+      timersRef.current.push(startTimer)
     }
 
-    rafRef.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [start, target, duration, delayPerDigit]);
-
-  const text = String(value).padStart(7, "0");
-  const digits = text.split("");
+    return () => {
+      timersRef.current.forEach(t => clearTimeout(t))
+      timersRef.current = []
+      setSpinFlags(Array(digits).fill(false))
+    }
+  }, [start, target, digits, animateDigits, duration, delayPerDigit])
 
   return (
     <div className="odometer flex items-center gap-2 px-3 py-2">
-      {digits.map((d, i) => (
-        <DigitReel
-          key={i}
-          digit={d}
-          overshoot={digitOffsets[i]}
-          delay={digitDelays[i] ?? i * delayPerDigit}
-        />
-      ))}
+      {currentDigits.map((d, i) => {
+        const digitsCount = currentDigits.length
+        const idxFromRight = digitsCount - 1 - i
+        const active = idxFromRight < Math.max(0, Math.min(animateDigits, digitsCount))
+        return (
+          <DigitReel
+            key={i}
+            digit={d}
+            active={active}
+            finalAnticipate={false}
+            spinDuration={duration}
+            spin={spinFlags[i]}
+          />
+        )
+      })}
     </div>
-  );
+  )
 }
 
-function DigitReel({ digit, overshoot = 0, delay = 0 }) {
-  const [spinning, setSpinning] = useState(false);
+function DigitReel({ digit, active = true, finalAnticipate = false, spinDuration = 2200, spin = false }) {
+  const [anticipate, setAnticipate] = useState(false)
+  const [localFinal, setLocalFinal] = useState(false)
+  const [displayDigit, setDisplayDigit] = useState(() => String(digit || '0'))
+  const spinRef = useRef(false)
 
+  // update displayed digit immediately if prop changes while not spinning
   useEffect(() => {
-    const t = setTimeout(() => setSpinning(true), delay);
-    return () => clearTimeout(t);
-  }, [delay]);
+    if (!spinRef.current) setDisplayDigit(String(digit))
+  }, [digit])
+
+  // anticipation when spin starts
+  useEffect(() => {
+    if (!active) return
+    const ant = setTimeout(() => {
+      setAnticipate(true)
+      const clr = setTimeout(() => setAnticipate(false), 300)
+      return () => clearTimeout(clr)
+    }, 80)
+    return () => clearTimeout(ant)
+  }, [active])
+
+  // drive display transitions when spin prop toggles
+  useEffect(() => {
+    let iv
+    if (spin) {
+      spinRef.current = true
+      // increment displayed digit every 60ms for smoother revolve
+      iv = setInterval(() => {
+        setDisplayDigit(prev => String((Number(prev) + 1) % 10))
+      }, 60)
+    } else {
+      // stop spinning: snap to final digit
+      spinRef.current = false
+      setDisplayDigit(String(digit))
+      if (iv) {
+        clearInterval(iv)
+        iv = null
+      }
+    }
+    return () => { if (iv) clearInterval(iv) }
+  }, [spin, digit])
+
+  useEffect(() => { if (finalAnticipate) setLocalFinal(true) }, [finalAnticipate])
 
   return (
-    <div
-      className="
-        relative w-12 h-16 overflow-hidden rounded-md 
-        flex items-center justify-center font-mono text-3xl
-        bg-gradient-to-b from-gray-800 to-gray-950 text-white
-        border border-gray-700 shadow-lg
-      "
-    >
-      {/* Reel */}
-      <div
-        className={`reel-track ${spinning ? "animate" : ""}`}
-        style={{
-          animationDelay: `${delay}ms`,
-          animationDuration: `${2200 + overshoot * 350}ms`,
-        }}
-      >
+    <div className={`relative w-12 h-16 overflow-hidden rounded-md flex items-center justify-center font-mono text-3xl bg-gradient-to-b from-gray-800 to-gray-950 text-white border border-gray-700 shadow-lg`}>
+      <div className={`reel-track ${anticipate ? 'anticipate' : ''} ${spin ? 'animate' : ''} ${localFinal ? 'final-anticipate' : ''}`} style={{ animationDuration: `${spinDuration}ms` }}>
         {Array.from({ length: 20 }).map((_, n) => (
-          <span
-            key={n}
-            className="h-16 flex items-center justify-center text-gray-300"
-          >
-            {n % 10}
-          </span>
+          <span key={n} className="h-16 flex items-center justify-center text-gray-300">{n % 10}</span>
         ))}
       </div>
-
-      {/* Current digit overlay */}
-      <div className="absolute inset-0 flex items-center justify-center text-yellow-300 drop-shadow-[0_0_6px_rgba(255,255,0,0.6)] font-bold pointer-events-none">
-        {digit}
-      </div>
+      <div className={`absolute inset-0 flex items-center justify-center text-yellow-300 drop-shadow-[0_0_6px_rgba(255,255,0,0.6)] font-bold pointer-events-none transition-opacity duration-150 ${spin ? 'opacity-0' : 'opacity-100'}`}>{displayDigit}</div>
     </div>
-  );
+  )
 }
+

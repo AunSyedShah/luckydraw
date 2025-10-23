@@ -35,15 +35,31 @@ export default function AdminPage() {
       const workbook = XLSX.read(data, { type: 'array' })
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(firstSheet)
+      // persist sheet names as categories (use up to first two by default, but store all for flexibility)
+      try { localStorage.setItem('categories', JSON.stringify(workbook.SheetNames)) } catch (err) { void err }
+      // build participants per sheet
+      const participantsBySheet = {}
+      workbook.SheetNames.forEach(name => {
+        const sheet = workbook.Sheets[name]
+        const r = XLSX.utils.sheet_to_json(sheet)
+        const mapped = r.map(row => ({
+          id: String(row.ID || row.Id || row.id || row['ID#'] || '').trim().replace(/\D/g, '').padStart(7, '0'),
+          name: String(row['Student Name'] || row['Name'] || row['Student'] || '').trim(),
+          course: String(row['Course'] || row['Program'] || '').trim()
+        })).filter(p => p.id && p.id !== '0000000')
+        participantsBySheet[name] = mapped
+      })
+      try { localStorage.setItem('participantsBySheet', JSON.stringify(participantsBySheet)) } catch (err) { void err }
       // Extract ID, Student Name, Course with basic header mapping
       const mapped = rows.map(row => ({
         id: String(row.ID || row.Id || row.id || row['ID#'] || '').trim().replace(/\D/g, '').padStart(7, '0'),
         name: String(row['Student Name'] || row['Name'] || row['Student'] || '').trim(),
         course: String(row['Course'] || row['Program'] || '').trim()
       })).filter(p => p.id && p.id !== '0000000')
-      setParticipants(mapped)
+  // keep showing the first sheet's participants in admin list for now
+  setParticipants(participantsBySheet[workbook.SheetNames[0]] || mapped)
       // persist for public page
-      localStorage.setItem('participants', JSON.stringify(mapped))
+  try { localStorage.setItem('participants', JSON.stringify(mapped)) } catch (err) { void err }
       // remove previous winner if admin re-uploads
   localStorage.removeItem('winner')
   localStorage.removeItem('winners')
@@ -56,6 +72,7 @@ export default function AdminPage() {
     localStorage.removeItem('participants')
     localStorage.removeItem('winner')
     localStorage.removeItem('winners')
+    localStorage.removeItem('categories')
   }
 
   return (
