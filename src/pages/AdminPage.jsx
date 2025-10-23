@@ -1,0 +1,98 @@
+import { useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
+import * as XLSX from 'xlsx'
+
+export default function AdminPage() {
+  const [participants, setParticipants] = useState([])
+  const [search, setSearch] = useState('')
+  const listRef = useRef(null)
+  const containerRef = useRef(null)
+
+  function toggleFullScreen() {
+    const el = containerRef.current || document.documentElement
+    if (!document.fullscreenElement) el.requestFullscreen?.()
+    else document.exitFullscreen?.()
+  }
+
+  function handleFile(e) {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const data = new Uint8Array(evt.target.result)
+      const workbook = XLSX.read(data, { type: 'array' })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(firstSheet)
+      // Extract ID, Student Name, Course with basic header mapping
+      const mapped = rows.map(row => ({
+        id: String(row.ID || row.Id || row.id || row['ID#'] || '').trim().replace(/\D/g, '').padStart(7, '0'),
+        name: String(row['Student Name'] || row['Name'] || row['Student'] || '').trim(),
+        course: String(row['Course'] || row['Program'] || '').trim()
+      })).filter(p => p.id && p.id !== '0000000')
+      setParticipants(mapped)
+      // persist for public page
+      localStorage.setItem('participants', JSON.stringify(mapped))
+      // remove previous winner if admin re-uploads
+      localStorage.removeItem('winner')
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  function clearAll() {
+    setParticipants([])
+    localStorage.removeItem('participants')
+    localStorage.removeItem('winner')
+  }
+
+  return (
+    <div className="min-h-screen min-w-full bg-gradient-to-br from-indigo-50 via-pink-50 to-yellow-50 flex items-center justify-center p-4">
+      <div ref={containerRef} className="w-full h-full max-w-6xl bg-white/80 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-white/30 relative min-h-[80vh]">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-extrabold text-indigo-900">Admin Panel - Lucky Draw</h1>
+          <div className="flex items-center gap-4">
+            <Link to="/public" className="px-3 py-2 bg-green-600 text-white rounded shadow text-sm hover:bg-green-700">View Public Page</Link>
+            <button className="px-3 py-2 bg-white border rounded shadow text-sm" onClick={toggleFullScreen}>Full screen</button>
+          </div>
+        </div>
+
+        <div className="mb-6 flex items-center gap-4">
+          <label className="inline-flex items-center bg-indigo-600 text-white px-4 py-2 rounded-full cursor-pointer shadow hover:bg-indigo-700">
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="hidden" />
+            Upload Participants
+          </label>
+          <div className="text-sm text-gray-500">Accepted: .xlsx, .xls, .csv</div>
+          <div className="ml-auto text-sm font-medium text-indigo-700">Participants: {participants.length}</div>
+        </div>
+
+        <div className="card rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold">Participants</h3>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ID, Name, or Course" className="px-3 py-2 border rounded w-64" />
+          </div>
+          <div ref={listRef} className="max-h-72 overflow-auto text-sm text-gray-700" style={{maxHeight: '60vh'}}>
+            {participants.length === 0 ? (
+              <div className="text-gray-400">No participants uploaded yet.</div>
+            ) : (
+              <ol className="divide-y">
+                {participants.map((p, idx) => ({ ...p, originalIndex: idx })).filter(p => p.id.includes(search) || p.name.toLowerCase().includes(search.toLowerCase()) || p.course.toLowerCase().includes(search.toLowerCase())).map(p => (
+                  <li key={p.originalIndex} data-idx={p.originalIndex} className="py-2 flex justify-between items-center">
+                    <div>
+                      <div className="font-mono font-semibold">{p.id}</div>
+                      <div className="text-xs text-gray-600">{p.name} - {p.course}</div>
+                    </div>
+                    <div className="text-xs muted">#{p.originalIndex + 1}</div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button className="px-4 py-2 rounded-md bg-indigo-600 text-white shadow hover:bg-indigo-700" onClick={clearAll}>Clear</button>
+          <button className="px-4 py-2 rounded-md bg-white border border-indigo-200 text-indigo-700 shadow" onClick={() => alert('Export coming soon')}>Export</button>
+        </div>
+      </div>
+    </div>
+  )
+}
