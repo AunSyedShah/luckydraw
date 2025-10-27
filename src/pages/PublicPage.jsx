@@ -36,7 +36,7 @@ export default function PublicPage() {
   }, [])
 
   // lightweight audio manager using Web Audio API
-  const audioRef = useRef({ ctx: null, tickOsc: null, tickGain: null })
+  const audioRef = useRef({ ctx: null, tickOsc: null, tickGain: null, tickInterval: null })
   const lastTickDigit = useRef('0000000')  // track all 7 digits to detect which one changed
 
   function ensureAudioContext() {
@@ -49,26 +49,31 @@ export default function PublicPage() {
   }
 
   function startTicking() {
-  if (!soundEnabled) return
-    const ctx = ensureAudioContext()
-    if (!ctx) return
-    // resume if suspended (many browsers require user gesture)
-    if (ctx.state === 'suspended') ctx.resume()
+    if (!soundEnabled) return
+    // Stop any existing ticking
     stopTicking()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = 'square'
-    osc.frequency.value = 330
-    gain.gain.value = 0.06
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.start()
-    audioRef.current.tickOsc = osc
-    audioRef.current.tickGain = gain
+    // Play geiger sound repeatedly every 100ms for continuous ticking background
+    audioRef.current.tickInterval = setInterval(() => {
+      try {
+        const audio = new Audio('/264512__dexus5__geiger1.wav')
+        audio.volume = 0.2
+        audio.play().catch(() => {
+          void 0
+        })
+      } catch {
+        void 0
+      }
+    }, 100)  // every 100ms = 10 ticks per second
   }
 
   const stopTicking = useCallback(() => {
     try {
+      // Clear the tick interval
+      if (audioRef.current.tickInterval) {
+        clearInterval(audioRef.current.tickInterval)
+        audioRef.current.tickInterval = null
+      }
+      // Cleanup old Web Audio API references (if any)
       if (audioRef.current.tickOsc) {
         audioRef.current.tickOsc.stop()
         audioRef.current.tickOsc.disconnect()
@@ -111,17 +116,11 @@ export default function PublicPage() {
 
   // short per-digit tick using audio file
   function playTick() {
+    // Per-digit accent: optional extra sound when digit changes
+    // (continuous ticking is now handled by startTicking interval)
     if (!soundEnabled) return
-    try {
-      const audio = new Audio('/264512__dexus5__geiger1.wav')
-      audio.volume = 0.3  // adjust volume as needed
-      audio.play().catch(() => {
-        // ignore autoplay policy errors
-        void 0
-      })
-    } catch {
-      void 0
-    }
+    // This could be used for accent sounds, currently disabled
+    return
   }
 
   useEffect(() => {
