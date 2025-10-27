@@ -109,34 +109,16 @@ export default function PublicPage() {
     })
   }
 
-  // short per-digit tick with pitch variation based on digit position
-  // digitIndex: 0 = leftmost (lowest pitch), 6 = rightmost (highest pitch)
-  // Creates ascending pitch ladder as animation cascades left-to-right
-  function playTick(digitIndex = 0) {
+  // short per-digit tick using audio file
+  function playTick() {
     if (!soundEnabled) return
-    const ctx = ensureAudioContext()
-    if (!ctx) return
-    if (ctx.state === 'suspended') ctx.resume()
     try {
-      const now = ctx.currentTime
-      // Create musical ladder: leftmost digit (index 0) plays lowest frequency
-      // Each digit to the right plays progressively higher pitch
-      const baseFreq = 600
-      const frequency = baseFreq + (digitIndex * 110)
-      
-      const o = ctx.createOscillator()
-      const g = ctx.createGain()
-      o.type = 'triangle'
-      o.frequency.value = frequency
-      g.gain.value = 0.0001
-      o.connect(g)
-      g.connect(ctx.destination)
-      // tiny percussive envelope
-      g.gain.setValueAtTime(0.0001, now)
-      g.gain.linearRampToValueAtTime(0.12, now + 0.003)
-      g.gain.exponentialRampToValueAtTime(0.001, now + 0.09)
-      o.start(now)
-      o.stop(now + 0.1)
+      const audio = new Audio('/264512__dexus5__geiger1.wav')
+      audio.volume = 0.3  // adjust volume as needed
+      audio.play().catch(() => {
+        // ignore autoplay policy errors
+        void 0
+      })
     } catch {
       void 0
     }
@@ -220,7 +202,7 @@ export default function PublicPage() {
               }
               if (digitIndexChanged !== -1) {
                 lastTickDigit.current = str
-                playTick(digitIndexChanged)
+                playTick()
               }
             }} onComplete={(final) => {
               const finalStr = String(final).padStart(ODOMETER_DIGITS, '0')
