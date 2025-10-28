@@ -52,23 +52,29 @@ export default function PublicPage() {
     if (!soundEnabled) return
     // Stop any existing ticking
     stopTicking()
-    // Play geiger sound repeatedly every 100ms for continuous ticking background
-    audioRef.current.tickInterval = setInterval(() => {
-      try {
-        const audio = new Audio('/264512__dexus5__geiger1.wav')
-        audio.volume = 0.2
-        audio.play().catch(() => {
-          void 0
-        })
-      } catch {
+    try {
+      // Play the long WhatsApp audio file - will be stopped when winner is announced
+      const audio = new Audio('/WhatsApp Audio 2025-10-28 at 13.47.47_8512aa51.mp3')
+      audio.volume = 0.5  // Adjust volume as needed
+      audio.play().catch(() => {
         void 0
-      }
-    }, 100)  // every 100ms = 10 ticks per second
+      })
+      // Store reference to stop it later
+      audioRef.current.tickAudio = audio
+    } catch {
+      void 0
+    }
   }
 
   const stopTicking = useCallback(() => {
     try {
-      // Clear the tick interval
+      // Stop the continuous casino audio
+      if (audioRef.current.tickAudio) {
+        audioRef.current.tickAudio.pause()
+        audioRef.current.tickAudio.currentTime = 0
+        audioRef.current.tickAudio = null
+      }
+      // Cleanup old interval references (if any)
       if (audioRef.current.tickInterval) {
         clearInterval(audioRef.current.tickInterval)
         audioRef.current.tickInterval = null
@@ -112,15 +118,6 @@ export default function PublicPage() {
       g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28)
       o.stop(t0 + 0.3)
     })
-  }
-
-  // short per-digit tick using audio file
-  function playTick() {
-    // Per-digit accent: optional extra sound when digit changes
-    // (continuous ticking is now handled by startTicking interval)
-    if (!soundEnabled) return
-    // This could be used for accent sounds, currently disabled
-    return
   }
 
   useEffect(() => {
@@ -201,7 +198,7 @@ export default function PublicPage() {
               }
               if (digitIndexChanged !== -1) {
                 lastTickDigit.current = str
-                playTick()
+                // playTick() // Disabled - using continuous background audio instead
               }
             }} onComplete={(final) => {
               const finalStr = String(final).padStart(ODOMETER_DIGITS, '0')
